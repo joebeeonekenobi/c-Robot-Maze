@@ -7,7 +7,7 @@ namespace Robot_Maze {
 		Assumptions:
 
 			The robot always starts at 0, 0.
-			The maze goal is always width-1, height-1.
+			The maze goal is placed at the deepest location within the generated maze.
 	 
 	*/
 
