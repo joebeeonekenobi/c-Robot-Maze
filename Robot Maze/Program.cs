@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Collections;
 
 namespace Robot_Maze {
 
@@ -96,10 +95,16 @@ namespace Robot_Maze {
 				maze[i] = new bool[y];
 			}
 
-			for (var i = 0; i < x; i++) {
-				for (var j = 0; j < y; j++) {
-					maze[i][j] = true;
-				} 
+			//Generate the maze walls
+			generateMaze();
+
+			printMaze();
+		}
+
+		public Coord robotCoordinate { 
+		
+			get {
+				return robotPosition;
 			}
 		}
 
@@ -135,7 +140,7 @@ namespace Robot_Maze {
 			}
 			else if (direction == Robot.Direction.None)
 			{
-				Console.WriteLine("Warning : The robot has elected to stay put! - Confused robot not optimal.");
+				//Console.WriteLine("Warning : The robot has elected to stay put! - Confused robot not optimal.");
 				position = new Coord(robotPosition.x, robotPosition.y);
 			}
 			else
@@ -211,11 +216,170 @@ namespace Robot_Maze {
 
 			return maze[coord.x][coord.y];
 		}
+
+		private void generateMaze() {
+
+			//dfs using backtracking ::  https://en.wikipedia.org/wiki/Maze_generation_algorithm
+
+			bool[][] visited = new bool[width][];
+			for (var i = 0; i < width; i++) {
+				visited[i] = new bool[height];
+			}
+
+			Stack s = new Stack();
+			Random r = new Random();
+
+			//Make the initial cell the current cell and mark it as visited
+			Coord current = new Coord(0, 0);
+			Coord deepest = current;
+			visited[0][0] = true; 
+			bool initial = true;
+
+			//The inital cell is open.
+			maze[current.x][current.y] = true;
+
+			//While there are still avenues to explore
+			while (initial || s.Count != 0) {
+
+				initial = false;
+
+				Coord[] possibleOptions = generatePossibleOptionsFor(current, visited);
+
+				//If the current cell has any neighbours which have not been visited
+				if (possibleOptions.Length > 0){
+
+					//Choose randomly one of the unvisited neighbours
+					Coord chosen = possibleOptions[r.Next(0, possibleOptions.Length)];
+
+					//Push the current cell to the stack
+					s.Push(current);
+
+					//Remove the wall between the current cell and the chosen cell
+					maze[chosen.x][chosen.y] = true;
+
+					//Make the chosen cell the current cell and mark it as visited
+					current = chosen;
+					visited[current.x][current.y] = true;
+
+					if (current.x + current.y > deepest.x + deepest.y) {
+						deepest = current;
+					}
+				}
+				//Else if stack is not empty
+				else if(s.Count != 0){
+
+					current = (Coord)s.Pop();
+				}
+			}
+
+			//Set the goal to be the deepest location visited and open
+			goal = deepest;
+		}
+
+		private void printMaze() {
+
+			char x = 'x';
+			char o = 'o';
+
+			for (var i = 0; i < maze.Length; i++) {
+				for (var j = 0; j < maze[i].Length; j++) {
+					if (maze[j][i]) {
+						Console.Write(o);
+					}
+					else { 
+						Console.Write(x);
+					}
+				}
+				Console.WriteLine();
+			}
+		}
+
+		private Coord[] generateNeighbours(Coord c) {
+
+			Stack toReturn = new Stack();
+
+			Coord above = new Coord(c.x, c.y - 1);
+			Coord below = new Coord(c.x, c.y + 1);
+			Coord left = new Coord(c.x - 1, c.y);
+			Coord right = new Coord(c.x + 1, c.y);
+
+			if (exists(above)) {
+				toReturn.Push(above);
+			}
+			if (exists(below)) {
+				toReturn.Push(below);
+			}
+			if (exists(left)) {
+				toReturn.Push(left);
+			}
+			if (exists(right)) {
+				toReturn.Push(right);
+			}
+
+			return Array.ConvertAll(toReturn.ToArray(), item => (Coord)item);
+		}
+
+		private Coord[] generateUnvisitedNeighboursFor(Coord c, bool[][] visited) {
+
+			Stack stack = new Stack();
+
+			Coord[] nei = generateNeighbours(c);
+			//At this point we have the neighbours that exist
+
+			//Remove the visited neighbours
+			for (var i = 0; i < nei.Length; i++) {
+
+				if (!visited[nei[i].x][nei[i].y]) {
+
+					stack.Push(nei[i]);
+				}
+			}
+
+			//We now have the non visited existing neighbours
+			return Array.ConvertAll(stack.ToArray(), item => (Coord)item);
+		}
+
+		private Coord[] generatePossibleOptionsFor(Coord c, bool[][] visited) {
+
+			Coord[] nei = generateUnvisitedNeighboursFor(c, visited);
+			Stack stack = new Stack();
+
+			//of the non visited neighbours
+			for (var i = 0; i < nei.Length; i++) {
+
+				//Generate THEIR neighbours
+				Coord[] itsNei = generateNeighbours(nei[i]);
+
+				//maintain a flag for if any of their neighbours are open (not walls)
+				bool hasNeiOpen = false;
+
+				//of the neighbours, if any of ITS neighbours are open, we cannot go there. (exclude the current)
+				for (var j = 0; j < itsNei.Length; j++) {
+
+					if (itsNei[j] == c) {
+						continue;
+					}
+
+					if (maze[itsNei[j].x][itsNei[j].y]) {
+						hasNeiOpen = true;
+						break;
+					}
+				}
+
+				//if all of its neighbours are closed, add the original neighbour as a visitable option
+				if (!hasNeiOpen) {
+					stack.Push(nei[i]);
+				}
+			}
+
+			return Array.ConvertAll(stack.ToArray(), item => (Coord)item);
+
+		}
 	}
 
 	class Robot{
 
-		public delegate Direction PollPointer(Robot robot, Maze maze);
+		public delegate Direction PollPointer(Robot robot);
 		public PollPointer pollMethod;
 		public Maze maze;
 		public enum Direction {
@@ -227,6 +391,12 @@ namespace Robot_Maze {
 			None
 		}
 
+		public Coord coordinate { 
+		
+			get {
+				return maze.robotCoordinate;
+			}
+		}
 
 		public Robot(Maze maze, PollPointer poll) {
 
@@ -239,11 +409,6 @@ namespace Robot_Maze {
 			return maze.checkDirection(direction);
 		}
 
-		public void moveRobot(Direction direction) {
-
-			maze.moveDirection(direction);
-		}
-
 		public bool isAtGoal(){
 
 			return maze.isAtGoal();
@@ -253,13 +418,30 @@ namespace Robot_Maze {
 
 	class Poll { 
 	
-		public static Robot.Direction poll(Robot robot, Maze maze) {
+		public static Robot.Direction poll(Robot robot) {
 
 			/*
 				Method to populate with logic 
 			*/
 
-			return Robot.Direction.South;
+			Random r = new Random();
+
+			while (!robot.isAtGoal()) { 
+			
+				Robot.Direction d = (Robot.Direction) r.Next(0, 4);
+
+				if (robot.isOpenDirection(d)) {
+
+					return d;
+
+				}
+				else {
+					continue;
+				}
+			}
+
+
+			return Robot.Direction.None;
 		}	
 	}
 	
@@ -273,9 +455,10 @@ namespace Robot_Maze {
 
 			while (!maze.isAtGoal()) {
 
-				robot.moveRobot(robot.pollMethod(robot, maze));
+				maze.moveDirection(robot.pollMethod(robot));
 				maze.readout();
 			}
+ 
 
 			Console.WriteLine("Goal!");
 			Console.ReadLine();
